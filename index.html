@@ -67,10 +67,7 @@
 <input id="cancel" type="button" value="Ой, не то" onclick="resetLastCar()">
 
 <script>
-    const config = {
-        dbName: 'car-catcher',
-        dbVersion: 5
-    };
+    const dbName = 'car-catcher';
 
     const check = () => window.indexedDB ?
         Promise.resolve() :
@@ -89,12 +86,12 @@
     };
 
     const open = () => new Promise((resolve, reject) => {
-        const request = window.indexedDB.open(config.dbName, config.dbVersion);
+        const request = window.indexedDB.open(dbName);
 
         request.onsuccess = event => resolve(event.target.result);
         request.onupgradeneeded = event => createStructure(event.target.result);
         request.onerror = event => reject(
-            `Can't open database ${config.dbName} ver ${config.dbVersion}.
+            `Can't open database ${dbName}.
             Error code ${event.target.errorCode}`
         );
     });
@@ -107,10 +104,20 @@
         const car = { number, place, date };
         const request = carStore.add(car);
 
-        request.onsuccess = event => resolve(event.target.result);
+        request.onsuccess = event => resolve(number + 1);
         request.onerror = event => reject(
-            `Can't insert ${JSON.stringify(car)} to
-            ${config.dbName} version ${config.dbVersion}`);
+            `Can't insert ${JSON.stringify(car)} to ${dbName}`);
+    });
+
+    const remove = (db, number) => new Promise((resolve, reject) => {
+        const carStore = db
+            .transaction('cars', 'readwrite')
+            .objectStore('cars');
+        const request = carStore.delete(number);
+
+        request.onsuccess = event => resolve(number);
+        request.onerror = event => reject(
+            `Can't delete ${number} from ${dbName}`);
     });
 
     const getLastCar = db => new Promise((resolve, reject) => {
@@ -125,8 +132,7 @@
             resolve(coursor && coursor.value);
         };
         request.onerror = event => reject(
-            `Can't gel last car from
-            ${config.dbName} version ${config.dbVersion}`);
+            `Can't gel last car from c${dbName}`);
     });
 
     const padZero = number => {
@@ -142,8 +148,8 @@
         return pad + number;
     };
 
-    const showLastNumber = lastNumber => {
-        const targetNumber = padZero(lastNumber + 1);
+    const showNumber = lastNumber => {
+        const targetNumber = padZero(lastNumber);
 
         document.getElementById('target-number').textContent = targetNumber;
     };
@@ -152,8 +158,8 @@
         check()
             .then(open)
             .then(getLastCar)
-            .then(lastCar => lastCar ? lastCar.number : 0)
-            .then(showLastNumber, alert);
+            .then(lastCar => lastCar ? lastCar.number + 1 : 1)
+            .then(showNumber, alert);
 
     };
 
@@ -168,7 +174,20 @@
 
                 return insert(db, car);
             })
-            .then(showLastNumber);
+            .then(showNumber);
+    };
+
+    const resetLastCar = () => {
+        check()
+            .then(open)
+            .then(db => {
+                const targetNumber = document.getElementById('target-number').textContent;
+                const number = parseInt(targetNumber, 10);
+                console.log(number);
+
+                return remove(db, number - 1);
+            })
+            .then(showNumber);
     }
 </script>
 </body>
