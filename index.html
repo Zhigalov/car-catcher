@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Car catcher</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        label,
+        input,
+        #target-number,
+        #place {
+            display: block;
+            text-align: center;
+            font-size: 24px;
+        }
+
+        label {
+            color: #888;
+            font-size: 12px;
+        }
+
+        #target-number {
+            font-size: 140px;
+        }
+
+        input[type="button"] {
+            display: inline-block;
+            padding: 9px 0;
+            margin: 3px;
+            width: 100%;
+            border-radius: 2px;
+            border: none;
+        }
+
+        input#catch {
+            margin-top: 24px;
+            background-color: #ffd426;
+        }
+
+        input#cancel {
+            background-color: #fff;
+            border: 1px solid #888;
+        }
+    </style>
+</head>
+<body onload="start()">
+
+<section>
+    <label for="target-number">Ищем номер</label>
+    <div id="target-number"></div>
+</section>
+
+<section>
+    <label for="place">Место</label>
+    <select name="place" id="place">
+        <option value="road">На дороге</option>
+        <option value="parking">В паркинге</option>
+        <option value="other">Другое</option>
+    </select>
+</section>
+
+<input id="catch" type="button" value="Нашли" onclick="catchCar()">
+<input id="cancel" type="button" value="Ой, не то" onclick="resetLastCar()">
+
+<script>
+    const config = {
+        dbName: 'car-catcher',
+        dbVersion: 5
+    };
+
+    const check = () => window.indexedDB ?
+        Promise.resolve() :
+        Promise.reject('Your browser doesn\'t support a stable version of IndexedDB');
+
+    const createStructure = db => {
+        const carStore = db.createObjectStore('cars', { keyPath: 'number' });
+
+        carStore.createIndex('place', 'place', { unique: false });
+        carStore.createIndex('date', 'date', { unique: false });
+
+        carStore.transaction.onerror = event => {
+            throw new Error(`Can't create structure ${event}`);
+        };
+
+    };
+
+    const open = () => new Promise((resolve, reject) => {
+        const request = window.indexedDB.open(config.dbName, config.dbVersion);
+
+        request.onsuccess = event => resolve(event.target.result);
+        request.onupgradeneeded = event => createStructure(event.target.result);
+        request.onerror = event => reject(
+            `Can't open database ${config.dbName} ver ${config.dbVersion}.
+            Error code ${event.target.errorCode}`
+        );
+    });
+
+    const insert = (db, { number, place }) => new Promise((resolve, reject) => {
+        const carStore = db
+            .transaction('cars', 'readwrite')
+            .objectStore('cars');
+        const date = new Date();
+        const car = { number, place, date };
+        const request = carStore.add(car);
+
+        request.onsuccess = event => resolve(event.target.result);
+        request.onerror = event => reject(
+            `Can't insert ${JSON.stringify(car)} to
+            ${config.dbName} version ${config.dbVersion}`);
+    });
+
+    const getLastCar = db => new Promise((resolve, reject) => {
+        const carStore = db
+            .transaction('cars')
+            .objectStore('cars');
+        const request = carStore.openCursor(null, 'prev');
+
+        request.onsuccess = event => {
+            const coursor = event.target.result;
+
+            resolve(coursor && coursor.value);
+        };
+        request.onerror = event => reject(
+            `Can't gel last car from
+            ${config.dbName} version ${config.dbVersion}`);
+    });
+
+    const padZero = number => {
+        let pad = '';
+
+        if (number < 10) {
+            pad += '0';
+        }
+        if (number < 100) {
+            pad += '0';
+        }
+
+        return pad + number;
+    };
+
+    const showLastNumber = lastNumber => {
+        const targetNumber = padZero(lastNumber + 1);
+
+        document.getElementById('target-number').textContent = targetNumber;
+    };
+
+    const start = () => {
+        check()
+            .then(open)
+            .then(getLastCar)
+            .then(lastCar => lastCar ? lastCar.number : 0)
+            .then(showLastNumber, alert);
+
+    };
+
+    const catchCar = () => {
+        check()
+            .then(open)
+            .then(db => {
+                const targetNumber = document.getElementById('target-number').textContent;
+                const number = parseInt(targetNumber, 10);
+                const place = document.getElementById('place').value;
+                const car = { number, place };
+
+                return insert(db, car);
+            })
+            .then(showLastNumber);
+    }
+</script>
+</body>
+</html>
